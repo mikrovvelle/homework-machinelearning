@@ -186,12 +186,25 @@ It looks like random forest with default configuration should be sufficient to m
 finalTrainRf <- randomForest(classe ~., data=trDeep[,c(-1:-8)])
 ```
 
-Now, I'll import the test data I'll need to make the prediction, with the same cleanup procedure:
+Now, I'll import the test data I'll need to make the prediction, with the same parameters, and I'll make sure to select the same columns.
 
 ```{r}
-
+testdata <- read.csv("pml-testing.csv",
+    na.strings=c("NA", "", "#DIV/0!"),
+    as.is=TRUE)
+testdata$user_name <- factor(testdata$user_name)
+# add "0" as wideRow, even though I won't use it
+testdata <- cbind(0, testdata)
+colnames(testdata)[1] <- "wideRow"
+testdata <- testdata[,colnames(trDeep)[-length(trDeep)]]
+finalPredict <- predict(finalTrainRf, testdata[,c(-1:-8)])
 ```
 
+The results are as follows:
+
+```{r}
+finalPredict
+```
 
 
 
