@@ -223,7 +223,7 @@ set.seed(989686)
 
 <h3>Training data import</h3>
 
-<p>I import the training &#39;as-is&#39; from the given source&mdash;i.e. I will determine level variables manually: <code>classe</code> and <code>user_name</code>. Blank fields, and fields marked &ldquo;NA&rdquo; or &ldquo;#DIV/0!&rdquo; will all be treated as missing or NA values.</p>
+<p>I import the training &#39;as-is&#39; from the given source&mdash;i.e. I will determine factor variables manually: <code>classe</code> and <code>user_name</code>. Blank fields, and fields marked &ldquo;NA&rdquo; or &ldquo;#DIV/0!&rdquo; will all be treated as missing or NA values.</p>
 
 <pre><code class="r">training &lt;- read.csv(&quot;pml-training.csv&quot;,
     na.strings=c(&quot;NA&quot;, &quot;&quot;, &quot;#DIV/0!&quot;),
@@ -283,7 +283,7 @@ trDeep_ts &lt;- trDeep[-trvec,]
 <ul>
 <li>timestamps: these are the most dangerous for over-fitting. I don&#39;t want my algorithm to expect certain activity to occur at a certain date-time.</li>
 <li>apparent programming overhead information (<code>new_window</code>, <code>num_window</code>): this is probably only coincidental to the activity taking place.</li>
-<li><code>user_name</code>: the grayest case. It seems likely that a user$+$sensor data combination is more powerful at prediction than sensor data alone, but I prefer to see how far I can do with just the motion data first, and then incorporate user information later if needed.</li>
+<li><code>user_name</code>: the grayest case. It seems likely that a user+sensor data combination is more powerful at prediction than sensor data alone, but I prefer to see how far I can do with just the motion data first, and then incorporate user information later if needed.</li>
 </ul>
 
 <p>Since <code>wideRow</code> is a placeholder for sensor data, I&#39;ll include it and check its importance after the first training attempt.</p>

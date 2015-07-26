@@ -22,7 +22,7 @@ set.seed(989686)
 
 ### Training data import
 
-I import the training 'as-is' from the given source---i.e. I will determine level variables manually: `classe` and `user_name`. Blank fields, and fields marked "NA" or "#DIV/0!" will all be treated as missing or NA values.
+I import the training 'as-is' from the given source---i.e. I will determine factor variables manually: `classe` and `user_name`. Blank fields, and fields marked "NA" or "#DIV/0!" will all be treated as missing or NA values.
 
 ```{r}
 training <- read.csv("pml-training.csv",
@@ -84,7 +84,7 @@ Most of the columns in `trDeep` are sensor data, except for several at the begin
 
 - timestamps: these are the most dangerous for over-fitting. I don't want my algorithm to expect certain activity to occur at a certain date-time.
 - apparent programming overhead information (`new_window`, `num_window`): this is probably only coincidental to the activity taking place.
-- `user_name`: the grayest case. It seems likely that a user$+$sensor data combination is more powerful at prediction than sensor data alone, but I prefer to see how far I can do with just the motion data first, and then incorporate user information later if needed.
+- `user_name`: the grayest case. It seems likely that a user+sensor data combination is more powerful at prediction than sensor data alone, but I prefer to see how far I can do with just the motion data first, and then incorporate user information later if needed.
 
 Since `wideRow` is a placeholder for sensor data, I'll include it and check its importance after the first training attempt.
 
