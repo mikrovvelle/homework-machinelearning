@@ -1,0 +1,6 @@
+machineLearning_cache*
+cache*
+*.csv
+problem*.txt
+*.Rdata
+.Rhistory

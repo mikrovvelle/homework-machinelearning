@@ -47,7 +47,7 @@ There are a lot of columns where the data is NA most of the time, and only show 
 
 I split the training set into two sets:
 
-1. "deep", where fewer columns but all 19k rows, and
+1. "deep", with fewer columns but all 19k rows, and
 2. "wide", the much more limited set of rows with complete cases.
 
 In "wide", I also remove a few more of the columns where the value is always the same. I'll convert `cvtd_timestamp` into a lubridate object in case I need it later.
@@ -90,7 +90,7 @@ Most of the columns in `trDeep` are sensor data, except for several at the begin
 
 - timestamps: these are the most dangerous for over-fitting. I don't want my algorithm to expect certain activity to occur at a certain date-time.
 - apparent programming overhead information (`new_window`, `num_window`): this is probably only coincidental to the activity taking place.
-- `user_name`: the grayest case. It seems likely that a user$+$sensor data combination is more powerful at prediction than sensor data alone, but I prefer to see how far I can do with just the motion data first, and then incorporate user information if needed.
+- `user_name`: the grayest case. It seems likely that a user$+$sensor data combination is more powerful at prediction than sensor data alone, but I prefer to see how far I can do with just the motion data first, and then incorporate user information later if needed.
 
 Since `wideRow` is a placeholder for sensor data, I'll include it and check its importance after the first training attempt.
 
@@ -99,7 +99,7 @@ Since `wideRow` is a placeholder for sensor data, I'll include it and check its 
 
 I start by running the training on the 'deep' training portion of the training set, `trDeep_tr`, with only sensor data (including the `wideRow` placeholder at column index 1).
 
-"Random forest" is the default training method in caret. It is reportedly very good for predictive accuracy. The disadvantage is speed and over-fitting. The speed issue is addressed by using the `randomForest()` function from the randomForest library, instead of caret's built-in `train()` function with `method='rf'` (the results are nearly the same, but the non-caret function takes a fraction of the time to run).
+"Random forest" is the default training method in caret. It is reportedly very good for predictive accuracy. The disadvantage is speed and over-fitting. The speed issue is addressed by using the `randomForest()` function from the randomForest library, instead of caret's built-in `train()` function with `method='rf'` (the results are nearly the same, but the non-caret function takes a fraction of the time to run). Over-fitting will be addressed by cross-validation with the non-training data (`trDeep_ts`).
 
 
 ```r
@@ -137,7 +137,7 @@ This out-of-sample accuracy of 99.324% might be as good as it gets. An expected 
 
 ### Aside: significance of `wideRow`s
 
-I check the importance of each variable used, including `wideRow`, using varImp:
+I check the importance of each variable used, including `wideRow`, using `varImp()`:
 
 
 ```r
@@ -163,32 +163,19 @@ It looks like `wideRow` is about 1% as influential as the next-least important v
 
 The spatial-position-to-classification element of boosting makes it a good candidate for comparison. On `trDeep`, this amounts to locating a point in a 50-dimensional space and classifying it based on its position. It feels like a good fit, intuitively.
 
-I'll train a tree-based boosting model, `gbm`.
+Looking at only the two most important variables from the randomForest approach, `roll_belt` and `yaw_belt`, there's already a noticeable pattern based on their postions and `classe`.
+
+![plot of chunk unnamed-chunk-12](figure/unnamed-chunk-12-1.png) 
+
+Add in the next one, `pitch_forearm` and it's apparent that knowing all of these spatial variables is likely to reveal sufficient pattern for accurate predctions.
+
+![plot of chunk unnamed-chunk-13](figure/unnamed-chunk-13-1.png) 
+
+I'll train an algorithm with the tree-based boosting model, `gbm`, which was effective based on the same principle with the iris data set in course lectures.
 
 
 ```r
 trainedGbm <- train(classe ~., data=trDeep_tr[,c(-1:-8)], method="gbm", verbose=FALSE)
-```
-
-```
-## Loading required package: gbm
-## Loading required package: survival
-## 
-## Attaching package: 'survival'
-## 
-## The following object is masked from 'package:caret':
-## 
-##     cluster
-## 
-## Loading required package: splines
-## Loaded gbm 2.1.1
-## Loading required package: plyr
-## 
-## Attaching package: 'plyr'
-## 
-## The following object is masked from 'package:lubridate':
-## 
-##     here
 ```
 
 Now look at the in-sample accuracy:
@@ -227,12 +214,8 @@ It might be possible to use R's default tree-based method.
 
 
 ```r
-registerDoParallel(cores=1)
+registerDoParallel(cores=1) # fails on 2 cores
 trainedRpart <- train(classe ~., data=trDeep_tr[,c(-1:-8)], method="rpart")
-```
-
-```
-## Loading required package: rpart
 ```
 
 Again, looking at the in-sample error:
@@ -242,7 +225,7 @@ Again, looking at the in-sample error:
 cmRpartIn <- confusionMatrix(trDeep_tr$classe, predict(trainedRpart, trDeep_tr[,c(-2:-8)]))
 ```
 
-In sample accuracy of 49.822% is not at all promising. Out-of-sample accuracy, with cross-validation, probably won't look much better.
+In-sample accuracy of 49.822% is not at all promising. Out-of-sample accuracy checked with cross-validation is worse, as expected.
 
 
 ```r
@@ -282,7 +265,7 @@ testdata <- read.csv("pml-testing.csv",
     as.is=TRUE)
 testdata$user_name <- factor(testdata$user_name)
 
-# add "0" as wideRow, just so they line up
+# add "0" as wideRow, so they line up
 testdata <- cbind(0, testdata)
 colnames(testdata)[1] <- "wideRow"
 
@@ -321,7 +304,4 @@ sum((predict(finalTrainRf, testdata[,c(-1,-8)]) == predict(trainedGbm, testdata[
 
 
 With an out-of-sample error of less than 1%, chances are that all 20 predictions will be correct.
-
-
-
 
