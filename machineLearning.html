@@ -61,22 +61,26 @@ img {
 
 
 
+<div id="summary" class="section level2">
+<h2>Summary</h2>
+<p>A random-forest trained algorithm, using only sensor data from columns fully populated with data (no NAs), shows the best suitability (among 3 candidates) for predicting the exercise type from the given information. This was verified using cross-validation with a 60/40 split between training and validation data. The expected out-of-sample accuracy is over 99%, which makes the algorithm general enough that extra components related to time and person can be ignored.</p>
+</div>
 <div id="preparation" class="section level2">
 <h2>Preparation</h2>
-<p>I’ll use knitr for generating this report, caret for running the machine learning, lubridate to handle date data (if I need it), and doParallel to run computations in parallel when I can. I’ll use caching in this document because the calculations can be very time-consuming.</p>
+<p>I’ll use knitr for generating this report, caret for running the machine learning, lubridate to handle date data (if I need it), and doParallel to run computations in parallel when I can. I’ll use caching in this document because the calculations can be very time-consuming. I’ll also use the training function from the caret-independent <em>randomForest</em> library, which showed much better performance (speed) than R’s built-in <code>train</code> function with <code>method=&quot;rf&quot;</code>.</p>
 <pre class="r"><code>library(knitr)
 library(lubridate)
-library(caret)</code></pre>
-<pre><code>## Loading required package: lattice
-## Loading required package: ggplot2</code></pre>
-<pre class="r"><code>library(doParallel)</code></pre>
-<pre><code>## Loading required package: foreach
-## Loading required package: iterators
-## Loading required package: parallel</code></pre>
-<pre class="r"><code>opts_chunk$set(cache=TRUE)
+library(caret)
+library(doParallel)
+library(randomForest)
+options(digits=3)
+
+opts_chunk$set(cache=TRUE)
 
 set.seed(989686)</code></pre>
-<p>I import the training ‘as-is’ from the given source—I will determine level variables manually: <code>classe</code> and <code>user_name</code>. Blank fields, and fields marked “NA” or “#DIV/0!” will all be treated as missing or NA values.</p>
+<div id="training-data-import" class="section level3">
+<h3>Training data import</h3>
+<p>I import the training ‘as-is’ from the given source—i.e. I will determine level variables manually: <code>classe</code> and <code>user_name</code>. Blank fields, and fields marked “NA” or “#DIV/0!” will all be treated as missing or NA values.</p>
 <pre class="r"><code>training &lt;- read.csv(&quot;pml-training.csv&quot;,
     na.strings=c(&quot;NA&quot;, &quot;&quot;, &quot;#DIV/0!&quot;),
     as.is=TRUE)
@@ -84,16 +88,22 @@ training$classe &lt;- factor(training$classe)
 training$user_name &lt;- factor(training$user_name)</code></pre>
 <p>I can also get rid of columns that are always NA, since there’s obviously no usable data there.</p>
 <pre class="r"><code>training &lt;- training[,as.vector(colSums(is.na(training)) != length(training$X))]</code></pre>
+</div>
 <div id="split-the-data-based-on-full-or-sparse-data" class="section level3">
 <h3>Split the data based on full or sparse data</h3>
-<p>There are a lot of columns where the data is NA most of the time, and only show usable data in about 200/19000 rows, or 1% of the time. This might be useful, but for now I’ll try to get by with just the densely-populated data.</p>
-<p>I split into two sets, “deep” where fewer columns but all 19k rows, and “wide”, the much more limited set of rows where we have complete cases. In “wide”, we remove a few more of the columns where the value is always the same (I’ll also move <code>cvtd_timestamp</code> into a lubridate object in case I need to deal with time).</p>
+<p>There are a lot of columns where the data is NA most of the time, and only show usable data in about 200/19000 rows, or 1% of the time. This could be useful, but for now I’ll try to get by with just the densely-populated data.</p>
+<p>I split the training set into two sets:</p>
+<ol style="list-style-type: decimal">
+<li>“deep”, where fewer columns but all 19k rows, and</li>
+<li>“wide”, the much more limited set of rows with complete cases.</li>
+</ol>
+<p>In “wide”, I also remove a few more of the columns where the value is always the same. I’ll convert <code>cvtd_timestamp</code> into a lubridate object in case I need it later.</p>
 <pre class="r"><code>fullCols &lt;- as.vector(colSums(is.na(training)))==0 &amp; as.vector(colSums(training==&quot;&quot;))==0
 training$cvtd_timestamp &lt;- parse_date_time(training$cvtd_timestamp, &quot;%d/%m/%Y %H:%M&quot;)
 
 trDeep &lt;- training[, fullCols]
 trDeep &lt;- trDeep[complete.cases(trDeep), ]</code></pre>
-<p>I’ll set the 200 or so ‘wide’ rows with complete cases aside in their own table, <code>trWide</code>, and will then use a single binary indicator to track whether the row is a complete case or not in <code>trDeep</code>. I’ll see how far I can get with just the narrow (deep) data and the binary indicator as a placeholder for wide rows. If I need the wide (shallow) data for more accuracy, I’ll work on bringing it back in later.</p>
+<p>I’ll set the 200 or so ‘wide’ rows with complete cases aside in their own table, <code>trWide</code>, and will then use a single binary (boolean) indicator column in <code>trDeep</code> to track whether the row is a complete case or not. I’ll see how far I can get with just the narrow (deep) data and the flag as a placeholder for wide rows. If I need the wide (shallow) data for more accuracy, I’ll work on bringing it back in later.</p>
 <pre class="r"><code>trWide &lt;- training[complete.cases(training),]
 trWide &lt;- Filter(function(x)(length(unique(x))&gt;1), trWide)
 
@@ -103,71 +113,127 @@ trDeep$wideRow[trWide$X] &lt;- 1</code></pre>
 </div>
 <div id="partitioning-training-and-test-data" class="section level3">
 <h3>Partitioning training and test data</h3>
-<p>I’ll split training and test data 60/40. With that, I’m ready to proceed and try out a few algorithms.</p>
+<p>Training and validation data are split 60/40 with even distribution of <code>classe</code> between them.</p>
 <pre class="r"><code>trvec &lt;- createDataPartition(trDeep$classe, p=0.6, list=FALSE)
 trDeep_tr &lt;- trDeep[trvec,]
 trDeep_ts &lt;- trDeep[-trvec,]</code></pre>
 </div>
 <div id="which-variables" class="section level3">
 <h3>Which variables?</h3>
-<p>Most of the columns in <code>trDeep</code> are sensor data, except for several at the beginning. The non-sensor columns include <code>user_name</code>, timestamps, and what appears to be some programming overhead information (<code>new_window</code>, <code>num_window</code>). I’ll leave most of these non-sensor variables out, since they are likely to contribute to over-fitting.</p>
-<p>The grayest case is <code>user_name</code>. It seems likely that a user<span class="math">\(\+\)</span>sensor data combination is more powerful at prediction than sensor data alone, but I prefer to see how far I can do with the motion data alone first, and then see if I want to bring the user information back in if I need it.</p>
+<p>Most of the columns in <code>trDeep</code> are sensor data, except for several at the beginning. I’ll leave out the non-sensor variables, since they are likely to contribute to over-fitting. These include:</p>
+<ul>
+<li>timestamps: these are the most dangerous for over-fitting. I don’t want my algorithm to expect certain activity to occur at a certain date-time.</li>
+<li>apparent programming overhead information (<code>new_window</code>, <code>num_window</code>): this is probably only coincidental to the activity taking place.</li>
+<li><code>user_name</code>: the grayest case. It seems likely that a user<span class="math">\(+\)</span>sensor data combination is more powerful at prediction than sensor data alone, but I prefer to see how far I can do with just the motion data first, and then incorporate user information if needed.</li>
+</ul>
 <p>Since <code>wideRow</code> is a placeholder for sensor data, I’ll include it and check its importance after the first training attempt.</p>
 </div>
 <div id="try-1-random-forest" class="section level3">
 <h3>Try 1: Random Forest</h3>
-<p>I start by running the training on the ‘deep’ training set, <code>trDeep_tr</code>, with only sensor data (including the <code>wideRow</code> placeholder).</p>
-<p>“Random forest” is the default training method in caret. It is reportedly very good for predictive accuracy. The disadvantage is speed and over-fitting. I’ll throw two cores at it to address the speed issue, and we’ll use simple cross-validation to address the over-fitting.</p>
+<p>I start by running the training on the ‘deep’ training portion of the training set, <code>trDeep_tr</code>, with only sensor data (including the <code>wideRow</code> placeholder at column index 1).</p>
+<p>“Random forest” is the default training method in caret. It is reportedly very good for predictive accuracy. The disadvantage is speed and over-fitting. The speed issue is addressed by using the <code>randomForest()</code> function from the randomForest library, instead of caret’s built-in <code>train()</code> function with <code>method='rf'</code> (the results are nearly the same, but the non-caret function takes a fraction of the time to run).</p>
 <pre class="r"><code>registerDoParallel(cores=2)
-trainedRf &lt;- train(classe ~., data=trDeep_tr[,c(-2:-8)], method=&quot;rf&quot;)</code></pre>
-<pre><code>## Loading required package: randomForest
-## randomForest 4.6-10
-## Type rfNews() to see new features/changes/bug fixes.</code></pre>
-<pre class="r"><code>predictRf &lt;- predict(trainedRf, trDeep_ts[,c(-2:-8)])</code></pre>
-<p>So then, cross-validation against the test set <code>trDeep_ts</code>:</p>
-<pre class="r"><code>cmRf &lt;- confusionMatrix(trDeep_ts$classe, predictRf)</code></pre>
-<p>This accuracy of <code>cmRf$overall[1]</code> might be as good as it gets, but we’ll try out a few other algorithms for comparison, to see if we can beat it.</p>
+trainedRf &lt;- randomForest(classe ~., data=trDeep_tr[,c(-2:-8)])</code></pre>
+<p>I can measure in-model accuracy by checking the confusion matrix against the training set:</p>
+<pre class="r"><code>cmRfIn &lt;- confusionMatrix(trDeep_tr$classe, predict(trainedRf, trDeep_tr[,c(-2:-8)]))</code></pre>
+<p><code>randomForest()</code> built a model with perfect in-model accuracy (1) with the training data. Now let’s check out-of-sample error with cross-validation against the validation set <code>trDeep_ts</code>:</p>
+<pre class="r"><code>predictRf &lt;- predict(trainedRf, trDeep_ts[,c(-2:-8)])
+cmRf &lt;- confusionMatrix(trDeep_ts$classe, predictRf)
+cmRf$table</code></pre>
+<pre><code>##           Reference
+## Prediction    A    B    C    D    E
+##          A 2225    6    0    0    1
+##          B    8 1508    2    0    0
+##          C    0   13 1351    4    0
+##          D    0    0   18 1268    0
+##          E    0    0    1    0 1441</code></pre>
+<p>This out-of-sample accuracy of 99.324% might be as good as it gets. An expected 99.324% accuracy out-of-sample is more than likely to predict 20 similar cases correctly. I’ll still try out a few other algorithms for the sake of comparison and curiosity.</p>
 </div>
 <div id="aside-significance-of-widerows" class="section level3">
 <h3>Aside: significance of <code>wideRow</code>s</h3>
-<p>We can check the importance of each variable used, including <code>wideRow</code>, using varImp:</p>
+<p>I check the importance of each variable used, including <code>wideRow</code>, using varImp:</p>
 <pre class="r"><code>variableImportance &lt;- varImp(trainedRf)</code></pre>
-<p>With such a low importance, we can continue with the data in <code>trDeep</code> only.</p>
+<p><code>wideRow</code>’s importance of 0.436 turns out to be the lowest of all the included predictor variables. Here are the next few importance rankings:</p>
+<pre class="r"><code>sort(variableImportance$Overall)[1:6]</code></pre>
+<pre><code>## [1]  0.436 37.712 46.002 51.345 53.772 60.393</code></pre>
+<p>It looks like <code>wideRow</code> is about 1% as influential as the next-least important variable, so I will continue with well-populated data in <code>trDeep</code> only.</p>
 </div>
 <div id="try-2-boosting" class="section level3">
 <h3>Try 2: Boosting</h3>
-<p>The spatial-position-to-classification element of boosting makes it a good candidate for comparison. On <code>trDeep</code>, this amounts to locating a point in a 50-dimensional space and classifying it based on its position. It feels like a good fit intuitively.</p>
+<p>The spatial-position-to-classification element of boosting makes it a good candidate for comparison. On <code>trDeep</code>, this amounts to locating a point in a 50-dimensional space and classifying it based on its position. It feels like a good fit, intuitively.</p>
+<p>I’ll train a tree-based boosting model, <code>gbm</code>.</p>
 <pre class="r"><code>trainedGbm &lt;- train(classe ~., data=trDeep_tr[,c(-1:-8)], method=&quot;gbm&quot;, verbose=FALSE)</code></pre>
-<pre><code>## Loading required package: gbm
-## Loading required package: survival
-## 
-## Attaching package: 'survival'
-## 
-## The following object is masked from 'package:caret':
-## 
-##     cluster
-## 
-## Loading required package: splines
-## Loaded gbm 2.1.1
-## Loading required package: plyr
-## 
-## Attaching package: 'plyr'
-## 
-## The following object is masked from 'package:lubridate':
-## 
-##     here</code></pre>
+<p>Now look at the in-sample accuracy:</p>
+<pre class="r"><code>cmGbmIn &lt;- confusionMatrix(trDeep_tr$classe, predict(trainedGbm, trDeep_tr[,c(-2:-8)]))</code></pre>
+<p>In-sample accuracy is 0.974. I check out-of-sample accuracy by cross-validating against the (pre-)testing data:</p>
 <pre class="r"><code>predictGbm &lt;- predict(trainedGbm, trDeep_ts[,c(-1:-8)])
-cmGbm &lt;- confusionMatrix(trDeep_ts$classe, predictGbm)</code></pre>
-<p>The accuracy is also quite good, but random forest is still better.</p>
+cmGbm &lt;- confusionMatrix(trDeep_ts$classe, predictGbm)
+cmGbm$table</code></pre>
+<pre><code>##           Reference
+## Prediction    A    B    C    D    E
+##          A 2192   28    8    3    1
+##          B   43 1432   37    6    0
+##          C    0   57 1284   25    2
+##          D    2    8   45 1227    4
+##          E    4   18   11   17 1392</code></pre>
+<p>The out-of-sample accuracy, 0.959, is also quite good, but the random-forest based algorithm still looks better.</p>
 </div>
 <div id="try-3-rpart-regressionclassification-trees" class="section level3">
 <h3>Try 3: <code>rpart</code> regression/classification trees</h3>
+<p>It might be possible to use R’s default tree-based method.</p>
 <pre class="r"><code>registerDoParallel(cores=1)
 trainedRpart &lt;- train(classe ~., data=trDeep_tr[,c(-1:-8)], method=&quot;rpart&quot;)</code></pre>
-<pre><code>## Loading required package: rpart</code></pre>
+<p>Again, looking at the in-sample error:</p>
+<pre class="r"><code>cmRpartIn &lt;- confusionMatrix(trDeep_tr$classe, predict(trainedRpart, trDeep_tr[,c(-2:-8)]))</code></pre>
+<p>In sample accuracy of 49.822% is not at all promising. Out-of-sample accuracy, with cross-validation, probably won’t look much better.</p>
 <pre class="r"><code>predictRpart &lt;- predict(trainedRpart, trDeep_ts[,c(-1:-8)])
-cmRpart &lt;- confusionMatrix(trDeep_ts$classe, predictRpart)</code></pre>
+cmRpart &lt;- confusionMatrix(trDeep_ts$classe, predictRpart)
+cmRpart$table</code></pre>
+<pre><code>##           Reference
+## Prediction    A    B    C    D    E
+##          A 2011   30  183    0    8
+##          B  627  520  371    0    0
+##          C  626   61  681    0    0
+##          D  577  222  487    0    0
+##          E  225  191  381    0  645</code></pre>
+<p>It’s almost a relief to find that there are indeed methods which won’t work as well. The lower out-of-sample accuracy of 49.159% takes it out of the running.</p>
 </div>
+</div>
+<div id="final-prediction" class="section level2">
+<h2>Final prediction</h2>
+<p>It looks like random forest with default configuration should be sufficient to make the final prediction on the test data. I’ll run the training on the entire <code>trDeep</code> data set:</p>
+<pre class="r"><code>finalTrainRf &lt;- randomForest(classe ~., data=trDeep[,c(-1:-8)])</code></pre>
+<p>Now, I’ll import the test data needed to make the prediction, with the same parameters, and I’ll make sure to select the same columns.</p>
+<pre class="r"><code>testdata &lt;- read.csv(&quot;pml-testing.csv&quot;,
+    na.strings=c(&quot;NA&quot;, &quot;&quot;, &quot;#DIV/0!&quot;),
+    as.is=TRUE)
+testdata$user_name &lt;- factor(testdata$user_name)
+
+# add &quot;0&quot; as wideRow, just so they line up
+testdata &lt;- cbind(0, testdata)
+colnames(testdata)[1] &lt;- &quot;wideRow&quot;
+
+# select the same columns that are in trDeep, except the results col
+testdata &lt;- testdata[,colnames(trDeep)[-length(trDeep)]]
+finalPredict &lt;- predict(finalTrainRf, testdata[,c(-1:-8)])</code></pre>
+<p>The results are as follows:</p>
+<pre class="r"><code>finalPredict</code></pre>
+<pre><code>##  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 
+##  B  A  B  A  A  E  D  B  A  A  B  C  B  A  E  E  A  B  B  B 
+## Levels: A B C D E</code></pre>
+<p>For good measure, I’ll double-check that the boost model from training performs similarly. If there is more than one difference between the two predictions, it means I made an incorrect assumption—the gbm accuracy of about 95.934% means I should expect to see one difference out of twenty. If the result here is 19 or 20, I’m confident enough to submit the results of the <code>randomForest</code>-based algorithm as my final prediction.</p>
+<pre class="r"><code>sum((predict(finalTrainRf, testdata[,c(-1,-8)]) == predict(trainedGbm, testdata[,c(-2:-8)])))</code></pre>
+<pre><code>## [1] 20</code></pre>
+<p>20/20 means I’m ready to submit. I’ll use the course’s recommended function to generate the answer files:</p>
+<pre class="r"><code>pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0(&quot;problem_id_&quot;,i,&quot;.txt&quot;)
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(finalPredict)</code></pre>
+<p>With an out-of-sample error of less than 1%, chances are that all 20 predictions will be correct.</p>
 </div>
 
 
