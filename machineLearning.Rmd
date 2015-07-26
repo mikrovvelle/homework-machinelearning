@@ -225,10 +225,10 @@ For good measure, I'll double-check that the boost model from training performs 
 sum((predict(finalTrainRf, testdata[,c(-1,-8)]) == predict(trainedGbm, testdata[,c(-2:-8)])))
 ```
 
-`r I(sum((predict(finalTrainRf, testdata[,c(-1,-8)]) == predict(trainedGbm, testdata[,c(-2:-8)]))))`/20 means I'm ready to submit. I'll use the course's recommended function to generate the answer files:
+`r I(sum((predict(finalTrainRf, testdata[,c(-1,-8)]) == predict(trainedGbm, testdata[,c(-2:-8)]))))`/20 means I'm ready to submit. I'll use the [course's recommended function](https://class.coursera.org/predmachlearn-030/assignment/view?assignment_id=5) to generate the answer files:
 
 
-```{r}
+```{r, echo=FALSE}
 pml_write_files = function(x){
   n = length(x)
   for(i in 1:n){

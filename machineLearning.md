@@ -45,11 +45,11 @@ training <- training[,as.vector(colSums(is.na(training)) != length(training$X))]
 
 There are a lot of columns where the data is NA most of the time, and only show usable data in about 200/19000 rows, or 1% of the time. This could be useful, but for now I'll try to get by with just the densely-populated data.
 
-I split the training set into two sets: 
+I split the training set into two sets:
 
-1. "deep", where fewer columns but all 19k rows, and 
+1. "deep", where fewer columns but all 19k rows, and
 2. "wide", the much more limited set of rows with complete cases.
- 
+
 In "wide", I also remove a few more of the columns where the value is always the same. I'll convert `cvtd_timestamp` into a lubridate object in case I need it later.
 
 
@@ -89,7 +89,7 @@ trDeep_ts <- trDeep[-trvec,]
 Most of the columns in `trDeep` are sensor data, except for several at the beginning. I'll leave out the non-sensor variables, since they are likely to contribute to over-fitting. These include:
 
 - timestamps: these are the most dangerous for over-fitting. I don't want my algorithm to expect certain activity to occur at a certain date-time.
-- apparent programming overhead information (`new_window`, `num_window`): this is probably only coincidental to the activity taking place. 
+- apparent programming overhead information (`new_window`, `num_window`): this is probably only coincidental to the activity taking place.
 - `user_name`: the grayest case. It seems likely that a user$+$sensor data combination is more powerful at prediction than sensor data alone, but I prefer to see how far I can do with just the motion data first, and then incorporate user information if needed.
 
 Since `wideRow` is a placeholder for sensor data, I'll include it and check its importance after the first training attempt.
@@ -315,20 +315,10 @@ sum((predict(finalTrainRf, testdata[,c(-1,-8)]) == predict(trainedGbm, testdata[
 ## [1] 20
 ```
 
-20/20 means I'm ready to submit. I'll use the course's recommended function to generate the answer files:
+20/20 means I'm ready to submit. I'll use the [course's recommended function](https://class.coursera.org/predmachlearn-030/assignment/view?assignment_id=5) to generate the answer files:
 
 
 
-```r
-pml_write_files = function(x){
-  n = length(x)
-  for(i in 1:n){
-    filename = paste0("problem_id_",i,".txt")
-    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
-  }
-}
-pml_write_files(finalPredict)
-```
 
 With an out-of-sample error of less than 1%, chances are that all 20 predictions will be correct.
 
