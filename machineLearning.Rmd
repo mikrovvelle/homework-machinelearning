@@ -81,12 +81,18 @@ I start by running the training on the 'deep' training set, `trDeep_tr`, with on
 ```{r}
 registerDoParallel(cores=2)
 trainedRf <- randomForest(classe ~., data=trDeep_tr[,c(-2:-8)])
-predictRf <- predict(trainedRf, trDeep_ts[,c(-2:-8)])
 ```
 
-So then, cross-validation against the test set `trDeep_ts`:
+I can measure in-model accuracy by checking the confusion matrix against the training set:
 
 ```{r}
+cmRfIn <- confusionMatrix(trDeep_tr$classe, predict(trainedRf, trDeep_tr[,c(-2:-8)]))
+```
+
+Random forest was able to reach a perfect fit with the training data. Now let's check out-of-sample error with cross-validation against the (pre-)test set `trDeep_ts`:
+
+```{r}
+predictRf <- predict(trainedRf, trDeep_ts[,c(-2:-8)])
 cmRf <- confusionMatrix(trDeep_ts$classe, predictRf)
 cmRf
 ```
@@ -95,13 +101,20 @@ This accuracy of `cmRf$overall[1]` might be as good as it gets, but we'll try ou
 
 ### Aside: significance of `wideRow`s
 
-We can check the importance of each variable used, including `wideRow`, using varImp:
+I'll check the importance of each variable used, including `wideRow`, using varImp:
 
 ```{r}
 variableImportance <- varImp(trainedRf)
+variableImportance["wideRow",]
 ```
 
-With such a low importance, we can continue with the data in `trDeep` only.
+For the sake of comparison, here are the next few importance rankings:
+
+```{r}
+sort(variableImportance$Overall)[1:7]
+```
+
+It looks like `wideRow` is about 1% as influential as the next-least important variable, so I will continue with the data in `trDeep` only.
 
 ### Try 2: Boosting
 
@@ -109,12 +122,20 @@ The spatial-position-to-classification element of boosting makes it a good candi
 
 ```{r}
 trainedGbm <- train(classe ~., data=trDeep_tr[,c(-1:-8)], method="gbm", verbose=FALSE)
-predictGbm <- predict(trainedGbm, trDeep_ts[,c(-1:-8)])
 ```
 
-I'll cross-validate against the (pre-)testing data and show the confusion matrix for comparison:
+Now look at the in-sample error:
 
 ```{r}
+cmGbmIn <- confusionMatrix(trDeep_tr$classe, predict(trainedGbm, trDeep_tr[,c(-2:-8)]))
+cmGbmIn
+```
+
+
+And check out-of-sample error by cross-validating against the (pre-)testing data:
+
+```{r}
+predictGbm <- predict(trainedGbm, trDeep_ts[,c(-1:-8)])
 cmGbm <- confusionMatrix(trDeep_ts$classe, predictGbm)
 cmGbm
 ```
@@ -129,11 +150,19 @@ It might be possible to use R's default tree-based method.
 ```{r}
 registerDoParallel(cores=1)
 trainedRpart <- train(classe ~., data=trDeep_tr[,c(-1:-8)], method="rpart")
-predictRpart <- predict(trainedRpart, trDeep_ts[,c(-1:-8)])
 ```
 
+Again, look at the in-sample error:
 
 ```{r}
+cmRpartIn <- confusionMatrix(trDeep_tr$classe, predict(trainedRpart, trDeep_tr[,c(-2:-8)]))
+cmRpartIn
+```
+
+and out-of-sample error with cross-validation:
+
+```{r}
+predictRpart <- predict(trainedRpart, trDeep_ts[,c(-1:-8)])
 cmRpart <- confusionMatrix(trDeep_ts$classe, predictRpart)
 cmRpart
 ```
@@ -145,12 +174,23 @@ It's almost a relief to find that there are indeed methods which won't work as w
 I'm nearly convinced to proceed with the out-of-the-box random forest method. The cross-validation between the training and pre-testing set shows an accuracy of around 99%. If I can verify this with an additional cross-validation, I'll proceed with it. I'll use the included `rfvc` function:
 
 ```{r}
-
 checkrf <- rfcv(trDeep_tr[,c(-2:-8)], predictRf)
 
 ```
 
+## Final prediction
 
+It looks like random forest with default configuration should be sufficient to make the final prediction on the test data. I'll run the training on the entire `trDeep` data set:
+
+```{r}
+finalTrainRf <- randomForest(classe ~., data=trDeep[,c(-1:-8)])
+```
+
+Now, I'll import the test data I'll need to make the prediction, with the same cleanup procedure:
+
+```{r}
+
+```
 
 
 
