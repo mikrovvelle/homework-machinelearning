@@ -67,7 +67,7 @@ trDeep_ts <- trDeep[-trvec,]
 
 Most of the columns in `trDeep` are sensor data, except for several at the beginning. The non-sensor columns include `user_name`, timestamps, and what appears to be some programming overhead information (`new_window`, `num_window`). I'll leave most of these non-sensor variables out, since they are likely to contribute to over-fitting.
 
-The grayest case is `user_name`. It seems likely that a user$\+$sensor data combination is more powerful at prediction than sensor data alone, but I prefer to see how far I can do with the motion data alone first, and then see if I want to bring the user information back in if I need it.
+The grayest case is `user_name`. It seems likely that a user$+$sensor data combination is more powerful at prediction than sensor data alone, but I prefer to see how far I can do with the motion data alone first, and then see if I want to bring the user information back in if I need it.
 
 Since `wideRow` is a placeholder for sensor data, I'll include it and check its importance after the first training attempt.
 
@@ -89,7 +89,7 @@ I can measure in-model accuracy by checking the confusion matrix against the tra
 cmRfIn <- confusionMatrix(trDeep_tr$classe, predict(trainedRf, trDeep_tr[,c(-2:-8)]))
 ```
 
-Random forest was able to reach a perfect fit with the training data. Now let's check out-of-sample error with cross-validation against the (pre-)test set `trDeep_ts`:
+Random forest was able to reach a perfect in-model fit (accuracy `r I(cmRfIn$overall["Accuracy"])`) with the training data. Now let's check out-of-sample error with cross-validation against the (pre-)test set `trDeep_ts`:
 
 ```{r}
 predictRf <- predict(trainedRf, trDeep_ts[,c(-2:-8)])
@@ -169,14 +169,6 @@ cmRpart
 
 It's almost a relief to find that there are indeed methods which won't work as well. The lower accuracy takes it out of the running.
 
-## Additional cross-validation
-
-I'm nearly convinced to proceed with the out-of-the-box random forest method. The cross-validation between the training and pre-testing set shows an accuracy of around 99%. If I can verify this with an additional cross-validation, I'll proceed with it. I'll use the included `rfvc` function:
-
-```{r}
-checkrf <- rfcv(trDeep_tr[,c(-2:-8)], predictRf)
-
-```
 
 ## Final prediction
 
@@ -193,7 +185,7 @@ testdata <- read.csv("pml-testing.csv",
     na.strings=c("NA", "", "#DIV/0!"),
     as.is=TRUE)
 testdata$user_name <- factor(testdata$user_name)
-# add "0" as wideRow, even though I won't use it
+# add "0" as wideRow, just so they line up
 testdata <- cbind(0, testdata)
 colnames(testdata)[1] <- "wideRow"
 testdata <- testdata[,colnames(trDeep)[-length(trDeep)]]
@@ -206,6 +198,11 @@ The results are as follows:
 finalPredict
 ```
 
+And for good measure, I'll double check that the boost model from training set performs similarly. If there is more than one difference between the two predictions, it means I made an incorrect assumption---the gbm accuracy of about 95% implies I could expect to see one difference.
 
+```{r}
+sum((predict(finalTrainRf, testdata[,c(-1,-8)]) == predict(trainedGbm, testdata[,c(-2:-8)])))
+```
 
+If the result here is 19 or 20, I'm confident enough to submit the results of the randomForest training as my final prediction.
 
