@@ -165,7 +165,7 @@ cmRf$table</code></pre>
 <pre class="r"><code>trainedGbm &lt;- train(classe ~., data=trDeep_tr[,c(-1:-8)], method=&quot;gbm&quot;, verbose=FALSE)</code></pre>
 <p>Now look at the in-sample accuracy:</p>
 <pre class="r"><code>cmGbmIn &lt;- confusionMatrix(trDeep_tr$classe, predict(trainedGbm, trDeep_tr[,c(-2:-8)]))</code></pre>
-<p>In-sample accuracy is 0.974. I check out-of-sample accuracy by cross-validating against the (pre-)testing data:</p>
+<p>In-sample accuracy is 97.368%. I check out-of-sample accuracy by cross-validating against the (pre-)testing data:</p>
 <pre class="r"><code>predictGbm &lt;- predict(trainedGbm, trDeep_ts[,c(-1:-8)])
 cmGbm &lt;- confusionMatrix(trDeep_ts$classe, predictGbm)
 cmGbm$table</code></pre>
@@ -176,7 +176,7 @@ cmGbm$table</code></pre>
 ##          C    0   57 1284   25    2
 ##          D    2    8   45 1227    4
 ##          E    4   18   11   17 1392</code></pre>
-<p>The out-of-sample accuracy, 0.959, is also quite good, but the random-forest based algorithm still looks better.</p>
+<p>The out-of-sample accuracy, 95.934%, is also quite good, but the random-forest based algorithm still looks better.</p>
 </div>
 <div id="try-3-rpart-regressionclassification-trees" class="section level3">
 <h3>Try 3: <code>rpart</code> regression/classification trees</h3>
@@ -224,15 +224,7 @@ finalPredict &lt;- predict(finalTrainRf, testdata[,c(-1:-8)])</code></pre>
 <p>For good measure, I’ll double-check that the boost model from training performs similarly. If there is more than one difference between the two predictions, it means I made an incorrect assumption—the gbm accuracy of about 95.934% means I should expect to see one difference out of twenty. If the result here is 19 or 20, I’m confident enough to submit the results of the <code>randomForest</code>-based algorithm as my final prediction.</p>
 <pre class="r"><code>sum((predict(finalTrainRf, testdata[,c(-1,-8)]) == predict(trainedGbm, testdata[,c(-2:-8)])))</code></pre>
 <pre><code>## [1] 20</code></pre>
-<p>20/20 means I’m ready to submit. I’ll use the course’s recommended function to generate the answer files:</p>
-<pre class="r"><code>pml_write_files = function(x){
-  n = length(x)
-  for(i in 1:n){
-    filename = paste0(&quot;problem_id_&quot;,i,&quot;.txt&quot;)
-    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
-  }
-}
-pml_write_files(finalPredict)</code></pre>
+<p>20/20 means I’m ready to submit. I’ll use the <a href="https://class.coursera.org/predmachlearn-030/assignment/view?assignment_id=5">course’s recommended function</a> to generate the answer files:</p>
 <p>With an out-of-sample error of less than 1%, chances are that all 20 predictions will be correct.</p>
 </div>
 
